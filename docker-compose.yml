@@ -1,0 +1,45 @@
+x-common-variables: &common-variables
+  # 务必修改此值
+  VNC_PASS: superpass123!
+  # 以下属性仅容器间调用时会使用
+  SUPERVISOR_WEB_USERNAME: admin
+  SUPERVISOR_WEB_PASSWORD: admin
+  SUPERVISOR_WEB_PORT: 9001
+  BROWSER_PORT: 9222
+  # 其他可修改配置
+  OPERATION_TIMEOUT: 180000 #每一个action的操作超时(wait/cwait)，最低尝试 OPERATION_TIMEOUT/WAIT_CHECK_INTERVAL 次
+  WAIT_CHECK_INTERVAL: 2000 #action 重试间隔
+  MAX_CONCURRENT_SITES: 3   #最大并发站点数
+
+services:
+  chromium-vnc:
+    build: ./chromium-vnc
+    container_name: chromium-vnc
+    environment:
+      <<: *common-variables
+    ports:
+      - "5900:5900"
+    volumes:
+      - '/etc/hosts:/etc/hosts:ro'
+      - '/etc/timezone:/etc/timezone:ro'
+      - '/etc/localtime:/etc/localtime:ro'
+      - './config/fluxbox-menu:/root/.fluxbox/menu:ro' # 桌面右键菜单      
+      - './config/chromium-data:/root/.config/chromium:rw' # alpine 的 chromium 包含wrapper 指定了用户数据目录, 必须使用该路径(除非以非root用户执行)
+    restart: unless-stopped
+
+  manager:
+    build: ./crontab
+    container_name: manager
+    environment:
+      <<: *common-variables
+    network_mode: service:chromium-vnc # 由于chromium限制只能本地访问接口, 使用共享的 chromium-vnc 网络栈
+    depends_on:
+      - chromium-vnc
+    volumes:
+      - '/etc/timezone:/etc/timezone:ro'
+      - '/etc/localtime:/etc/localtime:ro'
+      - './config/init.d:/init.d:ro' #初始化脚本
+      - './config/app:/app:rw' # nodejs 脚本
+      - './config/crontab:/etc/crontab.default:ro' # 定时任务配置
+
+    restart: unless-stopped      

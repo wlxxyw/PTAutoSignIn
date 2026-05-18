@@ -1,0 +1,45 @@
+- domain: "baidu.com", #作为 浏览器标签页的筛选
+  date: "2026-05-13", #上一次执行日期
+  status: 0, #失败次数
+  pause: false, #暂停此任务
+  retry: false, 
+  actions:
+    - goto: "https://www.baidu.com" # 原来的访问页面 除了 goto 其他方法都会尝试注入 jquery 方便操作
+    # 检查直到指定元素的存在,使用 jQuery选择器 会有超时时间
+    - wait: "#chat-input-area" 
+    # 执行JS
+    - action: |
+        document.querySelectorAll("textarea#chat-textarea")[0].value = "武汉今天天气"
+    - action: |
+        $("#search_submit").click()
+    # 与 wait的区别是不会重试 且返回false 就中断 响应失败
+    - check: "#chat-input-area" 
+    # 将直接执行JS
+    - cwait: |
+        if(!!count)count = 1;
+        if(count < 5){
+          count++;
+          return false;
+        }else{
+          return true;
+        }
+    # 执行JS, 并且不会重试
+    - ccheck: |
+        Math.random() > 0.5
+- domain: "pt.example.com", #常见PHP pt站示例
+  date: "2026-05-13",
+  status: 0,
+  pause: false,
+  retry: false, 
+  actions:
+    - goto: https://pt.example.com                     # 访问首页
+    - wait: table#info_block                           # 等待用户信息的出现
+    - action: |
+        var attendance = $("a[href='attendance.php']");
+        if(attendance.length == 1){
+          attendance[0].click() 
+        }else{
+          window.document.location.href = "https://pt.example.com/attendance.php"
+        }
+    - wait: table#info_block                           # 等待用户信息的出现
+    - check: h2:contains("签到成功")                    # 检测签到成功的信息   
