@@ -70,7 +70,7 @@
 └── config/                   # docker-compose 挂载的文件
     ├── fluxbox-menu           # fluxbox 的右键菜单配置， 增加 浏览器 的启动
     ├── crontab                # 定时任务定义    
-    ├── init.d/                # 定时任务容器初始化脚本 详见cron/start.sh 内逻辑
+    ├── init.d/                # 定时任务容器初始化脚本 详见crontab/start.sh 内逻辑
     │   └── 01_INIT_ENV.sh     # 安装软件， 初始化 /app 目录下nodejs项目依赖
     └── app/                   # nodejs 脚本
         ├── package.json       # 依赖配置
@@ -245,8 +245,9 @@ docker exec -it node node ./main.js
 ### 5. 定时任务配置
 
 ```cron
-# 使用主机的定时任务触发签到（3点钟以后，每20分钟执行一次）
-*/20 3-23 * * * docker exec -it node node ./main.js
+# 已新增容器内定时任务，无需从主机发起调用
+# 直接修改 crontab 容器的 crontab.default, 立刻生效(示例中docker-compose.yml 使用 config/crontab)
+*/20 3-23 * * * cd /app && node ./main.js
 ```
 
 ### 6. 查看日志
@@ -280,7 +281,9 @@ cat config.yaml
     ↓
 4. 检查是否有遗留标签页
    ├─ 存在 → 跳过（等待人工处理）
-   └─ 不存在 → 新建标签页继续
+   ├─ 不存在 && status==0 → 新建标签页开始处理 
+   ├─ 不存在 && status!=0 && retry=true → 新建标签页开始处理（重试）
+   └─ 不存在 && status!=0 && retry=false → 直接标记为成功（认为已经过人工处理）
     ↓
 5. 执行签到操作序列
    ├─ goto: 导航到页面
