@@ -3,9 +3,14 @@ export function sleep(ms) {
 }
 
 export function log(...args) {
-    console.log(`[${new Date().toISOString()}]`, ...args);
+    console.log(`[${new Date().toLocaleString()}]`, ...args);
 }
 
 export function getTodayDate() {
-    return new Date().toISOString().split('T')[0];
+    return new Date().toLocaleDateString();
+}
+
+export function isAfterNoon() {
+    const now = new Date();
+    return now.getHours() >= 12;
 }

@@ -1,7 +1,9 @@
+#!/usr/bin/node
+
 import fs from 'fs';
 import axios from 'axios';
 import yaml from 'js-yaml';
-import { log, sleep, getTodayDate } from './utils.js';
+import { log, sleep, getTodayDate, isAfterNoon } from './utils.js';
 import { BrowserManager } from './browserManager.js';
 import { ActionExecutor } from './actionExecutor.js';
 import { filterSites, updateSiteStatus } from './siteFilter.js';
@@ -14,9 +16,14 @@ const SUPERVISORD_API = `http://localhost:${process.env.SUPERVISOR_WEB_PORT}`;
 const OPERATION_TIMEOUT = parseInt(process.env.OPERATION_TIMEOUT || '180000');
 const WAIT_CHECK_INTERVAL = parseInt(process.env.WAIT_CHECK_INTERVAL || '2000');
 const MAX_CONCURRENT_SITES = parseInt(process.env.MAX_CONCURRENT_SITES || '3');
+const GOTIFY_MSG_API = process.env.GOTIFY_MSG_API;
 //固定的配置
 const configFile = './config.yaml';
 const SUPERVISORD_PROCESS_NAME = 'chrome';
+
+// 浏览器启动检查参数
+const STARTUP_RETRY_COUNT = 5;
+const STARTUP_RETRY_INTERVAL_MS = 2000;
 
 function loadConfig() {
     try {
@@ -57,8 +64,21 @@ async function startBrowser() {
                 timeout: 5000
             }
         );
-        log('浏览器启动成功');
+        log('浏览器启动指令已发送');
         await sleep(5000);
+        // 多次检查 CDP 是否真正可用
+        for (let i = 1; i <= STARTUP_RETRY_COUNT; i++) {
+            log(`检查浏览器 CDP 连接 (${i}/${STARTUP_RETRY_COUNT})...`);
+            const isReady = await testConnection(BROWSER_CDP);
+            if (isReady) {
+                log('浏览器 CDP 已就绪');
+                return;
+            }
+            if (i < STARTUP_RETRY_COUNT) {
+                await sleep(STARTUP_RETRY_INTERVAL_MS);
+            }
+        }
+        throw new Error(`浏览器启动后 CDP 不可用，已重试 ${STARTUP_RETRY_COUNT} 次`);
     } catch (error) {
         log('启动浏览器失败:', error.message);
         throw error;
@@ -83,18 +103,36 @@ async function stopBrowser() {
     }
 }
 
+async function sendNotification(title, message, priority = 3) {
+    if(!GOTIFY_MSG_API)return;
+    try {
+        await axios.post(
+            GOTIFY_PUSH_URL,
+            { title, message, priority },
+            {
+                headers: { 'Content-Type': 'application/json' },
+                timeout: 5000
+            }
+        );
+        log(`通知已发送: ${title} - ${message}`);
+    } catch (error) {
+        log(`发送通知失败: ${error.message}`);
+    }
+}
+
 async function executeSiteActions(site, browserManager, triedToDay) {
     const tabManager = browserManager.tabManager;
     const existingTab = await tabManager.findTabByUrl(site.domain);
 
-    if (triedToDay && site.status > 0 && !existingTab) {
-        log(`站点 ${site.domain} 当天已失败过，但浏览器无对应标签页，视为已人工处理并标记为成功`);
-        return { success: true, closeConnection: null };
-    }
-
     if (existingTab) {
         log(`站点 ${site.domain} 已存在标签页，跳过`);
         return { success: false, closeConnection: null };
+    }
+
+    // 非retry站点今天已执行失败过，但不存在相关窗口
+    if(triedToDay && site.status > 0 && !site.retry &&  !existingTab){
+        log(`站点 ${site.domain} 当天已失败过，但浏览器无对应标签页，视为已人工处理并标记为成功`);
+        return { success: true, closeConnection: null };
     }
 
     const newTab = await tabManager.openTab(`https://${site.domain}`);
@@ -139,6 +177,13 @@ async function executeWithConcurrencyLimit(sites, browserManager, limit) {
 
             const { success } = await executeSiteActions(site, browserManager, site.date === today);
 
+            // 处理失败通知：只有失败且超过12点，且今天尚未发送过通知时才发送
+            if (!success && isAfterNoon() && site.lastFailNotifyDate !== today) {
+                const notifyMsg = `站点 ${site.domain} 签到失败，当前时间已超过中午12点，请及时人工处理。`;
+                await sendNotification('签到失败提醒', notifyMsg, 5);
+                site.lastFailNotifyDate = today;  // 持久化，避免重复发送
+            }
+
             updateSiteStatus(site, success);
 
             return { site, success };
@@ -175,6 +220,7 @@ async function main() {
 
     const { filteredSites, configChanged } = filterSites(config);
     if (configChanged) {
+        await sendNotification('任务过期', "存在站点任务过期，请注意检查！", 5);
         saveConfig(config);
     }
 
@@ -204,7 +250,7 @@ async function main() {
     await browserManager.closeAll();
 
     if (!browserWasRunning) { //浏览器是本次打开的
-        if (filteredSites.filter(site => site.status !== 0 || !site.retry).length == 0) {//没有 失败就保持页面的站点
+        if (filteredSites.filter(site => site.status !== 0 && !site.retry).length == 0) { //没有 失败就保持页面的站点
             log('浏览器是本次打开的,且无失败不重试的站点，尝试停止浏览器');
             await stopBrowser();
         }
