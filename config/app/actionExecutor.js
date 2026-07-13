@@ -1,4 +1,4 @@
-import { sleep } from './utils.js';
+import { sleep, sleepRandom, log } from './utils.js';
 
 export class ActionExecutor {
     constructor(tabConnection) {
@@ -6,6 +6,7 @@ export class ActionExecutor {
     }
 
     async executeAction(action, timeout = 180000, retries = 3, interval = 2000) {
+        await sleepRandom(1000, 5000);
         var _action = this.normalizeAction(action);
         try {
             switch (_action.type) {
@@ -80,16 +81,16 @@ export class ActionExecutor {
                             "Runtime.evaluate",
                             {
                         "expression": `
-                            (async () => {
-                                if (!!window && !window.jQuery) {
-                                    await new Promise((resolve, reject) => {
-                                        const script = document.createElement('script');
-                                        script.src = 'https://cdn.bootcdn.net/ajax/libs/jquery/3.7.1/jquery.min.js';
-                                        script.onload = resolve;
+                    (async () => {
+                        if (!!window && !window.jQuery) {
+                            await new Promise((resolve, reject) => {
+                                const script = document.createElement('script');
+                                script.src = 'https://cdn.bootcdn.net/ajax/libs/jquery/3.7.1/jquery.min.js';
+                                script.onload = resolve;
                                         script.onerror = reject;
-                                        document.head.appendChild(script);
-                                    });
-                                }
+                                document.head.appendChild(script);
+                            });
+                        }
                             })()`,
                         "awaitPromise": true
                     }),
@@ -99,6 +100,11 @@ export class ActionExecutor {
     }
 
     extractValue(result) {
+        // 如果执行出错，视为条件不满足
+        if (result && result.exceptionDetails) {
+            console.log(result.exceptionDetails)
+            throw new Error(`脚本执行错误: ${result.exceptionDetails.text}`);
+        }
         if (result && result.result && typeof result.result.value !== 'undefined') {
             return result.result.value;
         }
@@ -122,7 +128,9 @@ export class ActionExecutor {
                 data: {
                     "method": "Runtime.evaluate",
                     "params": {
-                        "expression": action.action,
+                        "expression": `(async () => { ${action.action} })()`,
+                        "awaitPromise": true,
+                        "returnByValue": true
                     }
                 }
             }
@@ -133,7 +141,7 @@ export class ActionExecutor {
                 data: {
                     "method": "Runtime.evaluate",
                     "params": {
-                        "expression": `$(${JSON.stringify(action.wait)}).length > 0`,
+                        "expression": `!!window.jQuery(${JSON.stringify(action.wait)})`,
                         "returnByValue": true
                     }
                 }
@@ -145,7 +153,7 @@ export class ActionExecutor {
                 data: {
                     "method": "Runtime.evaluate",
                     "params": {
-                        "expression": action.cwait,
+                        "expression": `(async () => { ${action.cwait} })()`,
                         "awaitPromise": true,
                         "returnByValue": true
                     }
@@ -158,7 +166,7 @@ export class ActionExecutor {
                 data: {
                     "method": "Runtime.evaluate",
                     "params": {
-                        "expression": `$(${JSON.stringify(action.check)}).length > 0`,
+                        "expression": `!!window.jQuery(${JSON.stringify(action.check)})`,
                         "returnByValue": true
                     }
                 }
@@ -170,7 +178,7 @@ export class ActionExecutor {
                 data: {
                     "method": "Runtime.evaluate",
                     "params": {
-                        "expression": action.ccheck,
+                        "expression": `(async () => { ${action.ccheck} })()`,
                         "awaitPromise": true,
                         "returnByValue": true
                     }

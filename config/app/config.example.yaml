@@ -34,6 +34,55 @@
   actions:
     - goto: https://pt.example.com                     # 访问首页
     - wait: table#info_block                           # 等待用户信息的出现
+    - ccheck: |
+        // 处理验证码
+        // 1. 获取图片元素
+        const img = document.querySelector('img[alt="CAPTCHA"]');
+        const input = document.querySelector('input[name="imagestring"]');
+        if (!img) {
+            return true; //无验证码 直接跳过
+        }
+        if (!input) {
+            throw new Error('未找到 name="imagestring" 的输入框');
+        }
+        // 2. 等待图片加载完成（如果未加载）
+        if (!img.complete) {
+            await new Promise((resolve, reject) => {
+                img.onload = resolve;
+                img.onerror = () => reject(new Error('图片加载失败'));
+            });
+        }
+        // 3. 将图片转为纯 Base64（使用 Canvas）
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth || img.width;
+        canvas.height = img.naturalHeight || img.height;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(img, 0, 0);
+        const fullDataUrl = canvas.toDataURL('image/png');
+        const base64Data = fullDataUrl.split('base64,')[1];
+        // 4. 发送 POST 请求到 /ocr 接口
+        const response = await fetch('https://ocr.example.com/api', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Token': 'asdfghjklzxcvbnmqwertyuiop' },
+            body: JSON.stringify({ image: base64Data })
+        });
+        // 5. 解析响应
+        if (!response.ok) {
+            const errData = await response.json();
+            throw new Error(`OCR 请求失败: ${errData.error}`);
+        }
+        const result = await response.json();
+        if(!result.result && result.result.length != 6){
+            throw new Error('OCR 解析失败');
+        }
+        // 6. 将识别结果填入 input
+        input.value = result.result || '';
+        return true;
+    - action: |
+        const img = document.querySelector('img[alt="CAPTCHA"]');
+        const submit = document.querySelector('input[type="submit"]');
+        //无验证码 直接跳过
+        if(!!img && !!submit)submit.click();
     - action: |
         var attendance = $("a[href='attendance.php']");
         if(attendance.length == 1){

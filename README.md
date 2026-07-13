@@ -168,13 +168,13 @@
 - action: "document.getElementById('username').value = 'user'"
 
 # 等待条件满足（自定义 JS）
-- cwait: " !document.querySelector('.captcha')"
+- cwait: "return !document.querySelector('.captcha');"
 
 # 检查元素是否存在（不重试）
 - check: ".success-message"
 
 # 自定义检查（不重试）
-- ccheck: " !!$('#balance').length"
+- ccheck: "return !!$('#balance').length;"
 ```
 
 ### CDP 方法说明
