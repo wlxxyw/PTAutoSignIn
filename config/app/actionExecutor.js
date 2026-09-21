@@ -1,43 +1,52 @@
 import { sleep, sleepRandom, log } from './utils.js';
 
 export class ActionExecutor {
-    constructor(tabConnection) {
+    constructor(domain, tabConnection) {
+        this.domain = domain;
         this.tabConnection = tabConnection;
     }
 
     async executeAction(action, timeout = 180000, retries = 3, interval = 2000) {
         await sleepRandom(1000, 5000);
+        const domain = this.domain;
         var _action = this.normalizeAction(action);
         try {
             switch (_action.type) {
                 // 多次尝试执行 指定次数间隔时间
                 case "goto":
                     await this.executeWithRetry(
-                        () => this.tabConnection.send(_action.data.method, _action.data.params),
+                        () => {
+                            log(`${domain} goto: ${_action.data.params.url}`)
+                            return this.tabConnection.send(_action.data.method, _action.data.params);
+                        },
                         retries,
                         interval
                     );
                     return true;
                 case "action":
-                    await this.executeImportJquery();
                     await this.executeWithRetry(
-                        () => this.tabConnection.send(_action.data.method, _action.data.params),
+                        () => {
+                            log(`${domain} action: ${_action.data.params.expression}`);
+                            return this.tabConnection.send(_action.data.method, _action.data.params);
+                        },
                         retries,
                         interval
                     );
                     return true;
                 // 多次尝试执行, 指定超时时间
                 case "wait":
-                    await this.executeImportJquery();
                     await this.executeUntilTrue(
-                        () => this.tabConnection.send(_action.data.method, _action.data.params),
+                        () => {
+                            log(`${domain} wait: ${_action.data.params.expression}`);
+                            return this.tabConnection.send(_action.data.method, _action.data.params);
+                        },
                         timeout,
                         interval
                     );
                     return true;
                 // 仅执行一次 返回结果值
                 case "check":
-                    await this.executeImportJquery();
+                    log(`${domain} check: ${_action.data.params.expression}`)
                     return this.extractValue(await this.tabConnection.send(_action.data.method, _action.data.params));
                 default:
                     throw new Error(`未知操作类型: ${_action.type}`);
@@ -50,7 +59,8 @@ export class ActionExecutor {
     async executeWithRetry(fn, retries = 3, interval = 1000) {
         for (let i = 0; i < retries; i++) {
             try {
-                return await fn();
+                var result = await fn();
+                return this.extractValue(result);
             } catch (error) {
                 if (i === retries - 1) {
                     throw error;
@@ -75,31 +85,9 @@ export class ActionExecutor {
         throw new Error(`操作超时: ${timeout}ms`);
     }
 
-    async executeImportJquery(retries = 3, interval = 1000){
-                    await this.executeWithRetry(
-                        () => this.tabConnection.send(
-                            "Runtime.evaluate",
-                            {
-                        "expression": `
-                    (async () => {
-                        if (!!window && !window.jQuery) {
-                            await new Promise((resolve, reject) => {
-                                const script = document.createElement('script');
-                                script.src = 'https://cdn.bootcdn.net/ajax/libs/jquery/3.7.1/jquery.min.js';
-                                script.onload = resolve;
-                                        script.onerror = reject;
-                                document.head.appendChild(script);
-                            });
-                        }
-                            })()`,
-                        "awaitPromise": true
-                    }),
-                        retries,
-                        interval
-                    );
-    }
-
     extractValue(result) {
+        const domain = this.domain;
+        log(`${domain} extract result: ${JSON.stringify(result)}`)
         // 如果执行出错，视为条件不满足
         if (result && result.exceptionDetails) {
             console.log(result.exceptionDetails)
@@ -141,7 +129,8 @@ export class ActionExecutor {
                 data: {
                     "method": "Runtime.evaluate",
                     "params": {
-                        "expression": `!!window.jQuery(${JSON.stringify(action.wait)})`,
+                        "expression": `(async () => { return !!document.querySelector(${JSON.stringify(action.wait)}); })()`,
+                        "awaitPromise": true,
                         "returnByValue": true
                     }
                 }
@@ -166,7 +155,8 @@ export class ActionExecutor {
                 data: {
                     "method": "Runtime.evaluate",
                     "params": {
-                        "expression": `!!window.jQuery(${JSON.stringify(action.check)})`,
+                        "expression": `(async () => { return !!document.querySelector(${JSON.stringify(action.check)}); })()`,
+                        "awaitPromise": true,
                         "returnByValue": true
                     }
                 }

@@ -14,8 +14,3 @@ export function log(...args) {
 export function getTodayDate() {
     return new Date().toLocaleDateString();
 }
-
-export function isAfterNoon() {
-    const now = new Date();
-    return now.getHours() >= 12;
-}

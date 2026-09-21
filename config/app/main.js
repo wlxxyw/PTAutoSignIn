@@ -3,7 +3,7 @@
 import fs from 'fs';
 import axios from 'axios';
 import yaml from 'js-yaml';
-import { log, sleep, getTodayDate, isAfterNoon } from './utils.js';
+import { log, sleep, getTodayDate } from './utils.js';
 import { BrowserManager } from './browserManager.js';
 import { ActionExecutor } from './actionExecutor.js';
 import { filterSites, updateSiteStatus } from './siteFilter.js';
@@ -17,6 +17,7 @@ const OPERATION_TIMEOUT = parseInt(process.env.OPERATION_TIMEOUT || '180000');
 const WAIT_CHECK_INTERVAL = parseInt(process.env.WAIT_CHECK_INTERVAL || '2000');
 const MAX_CONCURRENT_SITES = parseInt(process.env.MAX_CONCURRENT_SITES || '3');
 const GOTIFY_MSG_API = process.env.GOTIFY_MSG_API;
+const QIYEWEIXIN_MSG_API = process.env.QIYEWEIXIN_MSG_API;
 //固定的配置
 const configFile = './config.yaml';
 const SUPERVISORD_PROCESS_NAME = 'chrome';
@@ -81,6 +82,7 @@ async function startBrowser() {
         throw new Error(`浏览器启动后 CDP 不可用，已重试 ${STARTUP_RETRY_COUNT} 次`);
     } catch (error) {
         log('启动浏览器失败:', error.message);
+        sendNotification("启动浏览器失败");
         throw error;
     }
 }
@@ -103,20 +105,46 @@ async function stopBrowser() {
     }
 }
 
-async function sendNotification(title, message, priority = 3) {
-    if(!GOTIFY_MSG_API)return;
-    try {
-        await axios.post(
-            GOTIFY_PUSH_URL,
-            { title, message, priority },
-            {
-                headers: { 'Content-Type': 'application/json' },
-                timeout: 5000
-            }
-        );
-        log(`通知已发送: ${title} - ${message}`);
-    } catch (error) {
-        log(`发送通知失败: ${error.message}`);
+async function sendNotification(message) {
+    if(!!GOTIFY_MSG_API){
+        try {
+            await axios.post(
+                GOTIFY_MSG_API,
+                {
+                    title: "签到提醒",
+                    message: message,
+                    priority: 5
+                },
+                {
+                    headers: { 'Content-Type': 'application/json' },
+                    timeout: 5000
+                }
+            );
+            log(`通知已发送: ${title} - ${message}`);
+        } catch (error) {
+            log(`发送通知失败: ${error.message}`);
+        }
+    }
+    if(!!QIYEWEIXIN_MSG_API){
+        try{
+            await axios.post(
+                QIYEWEIXIN_MSG_API,
+                {
+                    msgtype: 'text',
+                    text: {
+                        content: message
+                    }
+                },
+                {
+                    headers: { 'Content-Type': 'application/json' },
+                    timeout: 5000
+                }
+            );
+            log(`通知已发送: ${title} - ${message}`);
+        } catch (error) {
+            log(`发送通知失败: ${error.message}`);
+        }
+
     }
 }
 
@@ -137,7 +165,7 @@ async function executeSiteActions(site, browserManager, triedToDay) {
 
     const newTab = await tabManager.openTab(`https://${site.domain}`);
     const tabConnection = await browserManager.getConnection(newTab.webSocketDebuggerUrl);
-    const actionExecutor = new ActionExecutor(tabConnection);
+    const actionExecutor = new ActionExecutor(site.domain, tabConnection);
 
     var totalSuccess;
     try {
@@ -178,9 +206,9 @@ async function executeWithConcurrencyLimit(sites, browserManager, limit) {
             const { success } = await executeSiteActions(site, browserManager, site.date === today);
 
             // 处理失败通知：只有失败且超过12点，且今天尚未发送过通知时才发送
-            if (!success && isAfterNoon() && site.lastFailNotifyDate !== today) {
-                const notifyMsg = `站点 ${site.domain} 签到失败，当前时间已超过中午12点，请及时人工处理。`;
-                await sendNotification('签到失败提醒', notifyMsg, 5);
+            if (!success && new Date().getHours() >= 12 && site.lastFailNotifyDate !== today) {
+                const notifyMsg = `站点 ${site.domain} 签到失败，请及时人工处理。`;
+                await sendNotification(notifyMsg);
                 site.lastFailNotifyDate = today;  // 持久化，避免重复发送
             }
 
@@ -220,7 +248,7 @@ async function main() {
 
     const { filteredSites, configChanged } = filterSites(config);
     if (configChanged) {
-        await sendNotification('任务过期', "存在站点任务过期，请注意检查！", 5);
+        await sendNotification("任务过期-存在站点任务过期，请注意检查！");
         saveConfig(config);
     }
 
