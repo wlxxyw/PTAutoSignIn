@@ -24,6 +24,7 @@ elif [ -n "$HTTPS_PROXY" ]; then
 elif [ -n "$HTTP_PROXY" ]; then
     PROXY_ARG="--proxy-server=${HTTP_PROXY}"
 fi
-
+# 删除上次chromium未退出导致的无法启动
+[ -L "$HOME/.config/chromium/SingletonLock" ] && rm -f "$HOME/.config/chromium/Singleton"*
 # 最终命令
 exec chromium-browser ${PROXY_ARG} ${BASE_ARGS}
