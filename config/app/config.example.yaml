@@ -12,7 +12,7 @@
         document.querySelectorAll("textarea#chat-textarea")[0].value = "武汉今天天气"
     - action: |
         document.querySelector("#search_submit").click()
-    # 与 wait的区别是不会重试 且返回false 就中断 响应失败
+    # 与 wait的区别是不会在返回false的时候重试 且返回false 就立刻中断后续流程 运行出错会重试
     - check: "#chat-input-area" 
     # 将直接执行JS
     - cwait: |
@@ -23,6 +23,41 @@
         }else{
           return true;
         }
+    # 多个action 间，变量有效域 不一定一样， 使用元素属性储存变量
+    - action: |
+        document.querySelectorAll("textarea#chat-textarea")[0].value = 5;
+    - loop:
+        # 固定次数的循环
+        times: 5
+        actions:
+          - action: |
+              console.log(1111);
+    - loop:
+        # 使用 check/ccheck 条件的循环
+        ccheck: "return document.querySelectorAll("textarea#chat-textarea")[0].value > 0;"
+        actions:
+          - check: "#chat-input-area" 
+          - action: |
+              let loop_times = document.querySelectorAll("textarea#chat-textarea")[0].value;
+              document.querySelectorAll("textarea#chat-textarea")[0].value = loop_times - 1;
+          - switch:
+              # 依次执行判断 最多只有一个会执行       
+              - ccheck: "return document.querySelectorAll("textarea#chat-textarea")[0].value < 3;"
+                actions: "console.log(' <3 ')"     
+              # 作为保底 其他条件都不满足时 就会执行这一个 这里相当于 else 
+              - check: "return true;"
+                actions: "console.log(' 触发保底条件 ')"                       
+          - switch:
+              # 依次执行判断 最多只有一个会执行
+              - ccheck: "return document.querySelectorAll("textarea#chat-textarea")[0].value > 3;"
+                actions: "console.log(' >3 ');"
+              - ccheck: "return document.querySelectorAll("textarea#chat-textarea")[0].value == 3;"
+                actions: "console.log('333')"
+              - ccheck: "return document.querySelectorAll("textarea#chat-textarea")[0].value < 3;"
+                actions: "console.log(' <3 ')"         
+              # 由于上面三个条件覆盖所有情况，在check/ccheck不出错的情况下 永远不会执行这个分支                  
+              - check: "return document.querySelectorAll("textarea#chat-textarea")[0].value != 0;"
+                actions: "console.log(' 不出错不可能执行到这里 ')"         
     # 执行JS, 并且不会重试
     - ccheck: |
         Math.random() > 0.5
