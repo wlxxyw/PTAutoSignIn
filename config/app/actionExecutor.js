@@ -4,6 +4,7 @@ export class ActionExecutor {
     constructor(domain, tabConnection) {
         this.domain = domain;
         this.tabConnection = tabConnection;
+        this.actionResult = {};
     }
 
     async executeAction(action, timeout = 180000, retries = 3, interval = 2000) {
@@ -17,7 +18,9 @@ export class ActionExecutor {
                     return await this.#executeGoto(_action, retries, interval);
                 // 执行脚本
                 case "action":
-                    return await this.#executeActionScript(_action, retries, interval);
+                    let _actionResult = await this.#executeActionScript(_action, retries, interval);
+                    if(typeof(_actionResult) == 'object' && _actionResult && !Array.isArray(_actionResult)) this.actionResult = Object.assign({}, this.actionResult, _actionResult);
+                    return _actionResult;
                 // 多次尝试执行, 指定超时时间
                 case "wait":
                     return await this.#executeWait(_action, timeout, interval);
@@ -30,6 +33,8 @@ export class ActionExecutor {
                 // 循环语句
                 case "loop":
                     return await this.#executeLoop(_action, timeout, retries, interval);
+                case "cdp":
+                    return await this.#executeCdp(_action, retries, interval);
                 default:
                     throw new Error(`未知操作类型: ${_action.type}`);
             }
@@ -51,19 +56,23 @@ export class ActionExecutor {
                 );
             },
             retries,
-            interval
+            interval,
+            (resp) => {
+                if (resp && resp.errorText) throw new Error(resp.errorText);
+                return true;
+            }
         );
         return true;
     }
     async #executeActionScript(action, retries, interval) {
         const domain = this.domain;
-        await this.#executeWithRetry(
+        return await this.#executeWithRetry(
             () => {
                 log(`${domain} action: ${action.data}`);
                 return this.tabConnection.send(
                     "Runtime.evaluate",
                     {
-                        "expression": `(async () => { ${action.data} })()`,
+                        "expression": `(async () => { const $ctx = ${JSON.stringify(this.actionResult)}; ${action.data} })()`,
                         "awaitPromise": true,
                         "returnByValue": true
                     }
@@ -72,7 +81,6 @@ export class ActionExecutor {
             retries,
             interval
         );
-        return true;
     }
     async #executeWait(action, timeout, interval) {
         const domain = this.domain;
@@ -82,7 +90,7 @@ export class ActionExecutor {
                 return this.tabConnection.send(
                     "Runtime.evaluate",
                     {
-                        "expression": `(async () => { ${action.data} })()`,
+                        "expression": `(async () => { const $ctx = ${JSON.stringify(this.actionResult)}; ${action.data} })()`,
                         "awaitPromise": true,
                         "returnByValue": true
                     }
@@ -101,7 +109,7 @@ export class ActionExecutor {
                 return this.tabConnection.send(
                     "Runtime.evaluate",
                     {
-                        "expression": `(async () => { ${action.data} })()`,
+                        "expression": `(async () => { const $ctx = ${JSON.stringify(this.actionResult)}; ${action.data} })()`,
                         "awaitPromise": true,
                         "returnByValue": true
                     }
@@ -153,7 +161,6 @@ export class ActionExecutor {
         log(`${domain} switch: 没有匹配的 case`);
         return true;
     }
-
     async #executeLoop(action, timeout, retries, interval) {
         const domain = this.domain;
         const currentLoop = action.data;
@@ -224,12 +231,25 @@ export class ActionExecutor {
         }
         return true;
     }
+    async #executeCdp(action, retries, interval) {
+        const domain = this.domain;
+        const param = this.#resolveCdpParam(action);
+        return await this.#executeWithRetry(
+            () => {
+                log(`${domain} cdp: ${action.data.method}`);
+                return this.tabConnection.send(action.data.method, param);
+            },
+            retries,
+            interval,
+            () => true   // CDP 层没抛异常就算成功
+        );
+    }
 
-    async #executeWithRetry(fn, retries = 3, interval = 1000) {
+    async #executeWithRetry(fn, retries = 3, interval = 1000, extract) {
         for (let i = 0; i < retries; i++) {
             try {
                 var result = await fn();
-                return this.#extractValue(result);
+                return extract ? extract(result) : this.#extractValue(result);
             } catch (error) {
                 if (i === retries - 1) {
                     throw error;
@@ -241,12 +261,12 @@ export class ActionExecutor {
         return false;
     }
 
-    async #executeUntilTrue(fn, timeout = 180000, interval = 1000) {
+    async #executeUntilTrue(fn, timeout = 180000, interval = 1000, extract) {
         let startTime = Date.now();
         while (Date.now() - startTime < timeout) {
             try {
                 let result = await fn();
-                if (this.#extractValue(result)) return true;
+                if (extract ? extract(result):this.#extractValue(result)) return true;
             } catch (error) {
                 console.error('操作失败:', error.message);
             }
@@ -271,6 +291,32 @@ export class ActionExecutor {
             return undefined;
         }
         return false;
+    }
+
+    #resolveCdpParam(action) {
+        const ar = this.actionResult ?? {};
+        const raw = action.data.params ?? {};
+        const resolvePath = (p) => p.split('.').reduce((o, k) => o?.[k], ar);
+        const walk = (v) => {
+            if (typeof v === 'string') {
+                // 整串就是占位符 → 保持原始类型（数字不会被转成字符串）
+                const m = v.match(/^\{\{\s*(.+?)\s*\}\}$/);
+                if (m) return resolvePath(m[1]);
+                // 混在字符串里 → 做拼接
+                return v.replace(/\{\{\s*(.+?)\s*\}\}/g, (_, p) => {
+                    const val = resolvePath(p);
+                    return val == null ? '' : String(val);
+                });
+            }
+            if (Array.isArray(v)) return v.map(walk);
+            if (v && typeof v === 'object') {
+                const out = {};
+                for (const k of Object.keys(v)) out[k] = walk(v[k]);
+                return out;
+            }
+            return v;
+        };
+        return walk(raw);
     }
 
     #normalizeAction(action) {
@@ -320,6 +366,12 @@ export class ActionExecutor {
             return {
                 type: "loop",
                 data: action.loop
+            }
+        }
+        if (action.cdp){
+            return {
+                type: "cdp",
+                data: action.cdp
             }
         }
         throw new Error(`无法识别的 action: ${JSON.stringify(action)}`);
