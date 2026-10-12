@@ -135,12 +135,15 @@ export class ActionExecutor {
                     }
                     for (let j = 0; j < currentCase.actions.length; j++) {
                         const currentCaseAction = currentCase.actions[j];
-                        await this.executeAction(
+                        const success =  await this.executeAction(
                             currentCaseAction,
                             timeout,
                             retries,
                             interval
                         );
+                        if (!success) {
+                            throw new Error(`操作失败: ${JSON.stringify(currentCaseAction)}`);
+                        }
                     }
                 }
                 // 命中后立即结束 switch
@@ -148,7 +151,7 @@ export class ActionExecutor {
             }
         }
         log(`${domain} switch: 没有匹配的 case`);
-        return false;
+        return true;
     }
 
     async #executeLoop(action, timeout, retries, interval) {
@@ -170,12 +173,15 @@ export class ActionExecutor {
                     }
                     for (let i = 0; i < currentLoop.actions.length; i++) {
                         const currentLoopAction = currentLoop.actions[i];
-                        await this.executeAction(
+                        const success =  await this.executeAction(
                             currentLoopAction,
                             timeout,
                             retries,
                             interval
                         );
+                        if (!success) {
+                            throw new Error(`操作失败: ${JSON.stringify(currentLoopAction)}`);
+                        }
                     }
                 }
             }
@@ -197,12 +203,15 @@ export class ActionExecutor {
                     }
                     for (let i = 0; i < currentLoop.actions.length; i++) {
                         const currentLoopAction = currentLoop.actions[i];
-                        await this.executeAction(
+                        const success =  await this.executeAction(
                             currentLoopAction,
                             timeout,
                             retries,
                             interval
                         );
+                        if (!success) {
+                            throw new Error(`操作失败: ${JSON.stringify(currentLoopAction)}`);
+                        }
                     }
                 }
                 if(count > 100){

@@ -50,14 +50,18 @@
           - switch:
               # 依次执行判断 最多只有一个会执行
               - ccheck: "return document.querySelectorAll("textarea#chat-textarea")[0].value > 3;"
-                actions: "console.log(' >3 ');"
+                actions: 
+                  - "console.log(' >3 ');"
               - ccheck: "return document.querySelectorAll("textarea#chat-textarea")[0].value == 3;"
-                actions: "console.log('333')"
+                actions: 
+                  - "console.log('333')"
               - ccheck: "return document.querySelectorAll("textarea#chat-textarea")[0].value < 3;"
-                actions: "console.log(' <3 ')"         
+                actions: 
+                  - "console.log(' <3 ')"         
               # 由于上面三个条件覆盖所有情况，在check/ccheck不出错的情况下 永远不会执行这个分支                  
               - check: "return document.querySelectorAll("textarea#chat-textarea")[0].value != 0;"
-                actions: "console.log(' 不出错不可能执行到这里 ')"         
+                actions: 
+                  - "console.log(' 不出错不可能执行到这里 ')"         
     # 执行JS, 并且不会重试
     - ccheck: |
         Math.random() > 0.5
