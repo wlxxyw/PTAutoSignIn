@@ -19,6 +19,7 @@ export class ActionExecutor {
                 // 执行脚本
                 case "action":
                     let _actionResult = await this.#executeActionScript(_action, retries, interval);
+                    if(_actionResult == undefined) return true;
                     if(typeof(_actionResult) == 'object' && _actionResult && !Array.isArray(_actionResult)) this.actionResult = Object.assign({}, this.actionResult, _actionResult);
                     return _actionResult;
                 // 多次尝试执行, 指定超时时间
@@ -280,15 +281,15 @@ export class ActionExecutor {
         log(`${domain} extract result: ${JSON.stringify(result)}`)
         // 如果执行出错，视为条件不满足
         if (result && result.exceptionDetails) {
-            console.log(result.exceptionDetails)
+            log(result.exceptionDetails)
             return false;
             //throw new Error(`脚本执行错误: ${result.exceptionDetails.text}`);
         }
         if (result && result.result) {
             if (Object.prototype.hasOwnProperty.call(result.result, "value")) {
                 return result.result.value;
-            }
-            return undefined;
+        }
+        return undefined;
         }
         return false;
     }
