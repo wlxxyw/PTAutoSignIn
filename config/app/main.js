@@ -120,7 +120,7 @@ async function sendNotification(message) {
                     timeout: 5000
                 }
             );
-            log(`通知已发送: ${title} - ${message}`);
+            log(`通知已发送: ${message}`);
         } catch (error) {
             log(`发送通知失败: ${error.message}`);
         }
@@ -140,7 +140,7 @@ async function sendNotification(message) {
                     timeout: 5000
                 }
             );
-            log(`通知已发送: ${title} - ${message}`);
+            log(`通知已发送: ${message}`);
         } catch (error) {
             log(`发送通知失败: ${error.message}`);
         }
@@ -199,38 +199,45 @@ async function executeWithConcurrencyLimit(sites, browserManager, limit) {
     const results = [];
     const executing = [];
     const today = getTodayDate();
-    for (const site of sites) {
-        const promise = (async () => {
-            log(`开始处理站点: ${site.domain}`);
 
-            const { success } = await executeSiteActions(site, browserManager, site.date === today);
+    // 单个站点的执行逻辑（抽出来，方便复用和调度）
+    const runSite = async (site) => {
+        log(`开始处理站点: ${site.domain}`);
 
-            // 处理失败通知：只有失败且超过12点，且今天尚未发送过通知时才发送
-            if (!success && new Date().getHours() >= 12 && site.lastFailNotifyDate !== today) {
-                const notifyMsg = `站点 ${site.domain} 签到失败，请及时人工处理。`;
-                await sendNotification(notifyMsg);
-                site.lastFailNotifyDate = today;  // 持久化，避免重复发送
-            }
+        const { success } = await executeSiteActions(site, browserManager, site.date === today);
 
-            updateSiteStatus(site, success);
-
-            return { site, success };
-        })();
-
-        executing.push(promise);
-        results.push(promise);
-
-        if (executing.length >= limit) {
-            await Promise.race(executing);
-            const completed = await Promise.allSettled(executing);
-            executing.length = 0;
-
-            for (const result of completed) {
-                if (result.status === 'rejected') {
-                    log('站点执行出错:', result.reason);
-                }
-            }
+        // 处理失败通知：只有失败且超过12点，且今天尚未发送过通知时才发送
+        if (!success && new Date().getHours() >= 12 && site.lastFailNotifyDate !== today) {
+            const notifyMsg = `站点 ${site.domain} 签到失败，请及时人工处理。`;
+            await sendNotification(notifyMsg);
+            site.lastFailNotifyDate = today;  // 持久化，避免重复发送
         }
+
+        updateSiteStatus(site, success);
+        
+        return { site, success };
+    };
+
+    for (const site of sites) {
+        // 如果当前并发已经到上限，等一个完成
+        if (executing.size >= limit) {
+            await Promise.race(executing);
+        }
+
+        // 创建一个包装 Promise，完成后自动从池中移除
+        const p = runSite(site)
+            .then((value) => {
+                results.push({ status: 'fulfilled', value });
+            })
+            .catch((reason) => {
+                log('站点执行出错:', reason);
+                results.push({ status: 'rejected', reason });
+            })
+            .finally(() => {
+                executing.delete(p);   // ← 关键：完成后立刻让位
+            });
+
+        executing.add(p);
     }
 
     await Promise.allSettled(executing);
