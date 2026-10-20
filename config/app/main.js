@@ -170,7 +170,7 @@ async function executeSiteActions(site, browserManager, triedToDay) {
     var totalSuccess;
     try {
         for (const action of site.actions) {
-            const success = await actionExecutor.executeAction(action, OPERATION_TIMEOUT, WAIT_CHECK_INTERVAL);
+            const success = await actionExecutor.executeAction(action, { timeout: OPERATION_TIMEOUT, interval: WAIT_CHECK_INTERVAL });
             if (!success) {
                 throw new Error(`操作失败: ${JSON.stringify(action)}`);
             }

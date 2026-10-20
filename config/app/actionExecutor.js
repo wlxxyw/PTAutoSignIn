@@ -7,8 +7,7 @@ export class ActionExecutor {
         this.actionResult = {};
     }
 
-    async executeAction(action, timeout = 180000, retries = 3, interval = 2000) {
-        await sleepRandom(1000, 5000);
+    async executeAction(action, { timeout = 180000, retries = 3, interval = 2000 } = {}) {
         const domain = this.domain;
         var _action = this.#normalizeAction(action);
         try {
@@ -146,9 +145,7 @@ export class ActionExecutor {
                         const currentCaseAction = currentCase.actions[j];
                         const success =  await this.executeAction(
                             currentCaseAction,
-                            timeout,
-                            retries,
-                            interval
+                            { timeout, retries, interval }
                         );
                         if (!success) {
                             throw new Error(`操作失败: ${JSON.stringify(currentCaseAction)}`);
@@ -183,9 +180,7 @@ export class ActionExecutor {
                         const currentLoopAction = currentLoop.actions[i];
                         const success =  await this.executeAction(
                             currentLoopAction,
-                            timeout,
-                            retries,
-                            interval
+                            { timeout, retries, interval }
                         );
                         if (!success) {
                             throw new Error(`操作失败: ${JSON.stringify(currentLoopAction)}`);
@@ -213,9 +208,7 @@ export class ActionExecutor {
                         const currentLoopAction = currentLoop.actions[i];
                         const success =  await this.executeAction(
                             currentLoopAction,
-                            timeout,
-                            retries,
-                            interval
+                            { timeout, retries, interval }
                         );
                         if (!success) {
                             throw new Error(`操作失败: ${JSON.stringify(currentLoopAction)}`);
@@ -234,7 +227,7 @@ export class ActionExecutor {
     }
     async #executeCdp(action, retries, interval) {
         const domain = this.domain;
-        const param = this.#resolveCdpParam(action);
+        const param = this.#resolveParam(action.data.params);
         return await this.#executeWithRetry(
             () => {
                 log(`${domain} cdp: ${action.data.method}`);
@@ -294,9 +287,9 @@ export class ActionExecutor {
         return false;
     }
 
-    #resolveCdpParam(action) {
+    #resolveParam(params) {
         const ar = this.actionResult ?? {};
-        const raw = action.data.params ?? {};
+        const raw = params ?? {};
         const resolvePath = (p) => p.split('.').reduce((o, k) => o?.[k], ar);
         const walk = (v) => {
             if (typeof v === 'string') {
