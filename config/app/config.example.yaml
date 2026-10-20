@@ -1,4 +1,5 @@
-# yaml 注释会在执行一次脚本后丢失，js 注释会照样保留
+## 注意 yaml 注释会在执行一次脚本后丢失，js 注释会照样保留
+
 # domain 站点，最好是域名的一部分，用于判断浏览器是否有已经打开的相关页面
 # date 上一次是那一天执行的，当 date 是今天且 status==0, 今天就不会再执行该站点
 # expireDate 过期时间， 超过这一天后 将 pause 设为 true
@@ -30,65 +31,52 @@
     - wait: .head
     - check: table#info_block
 # 简单签到 进行一次种子列表的访问 然后访问签到页面
-- domain: hdtime.org
+- domain: example1.com # 比如 时光 红豆饭 等
   date: 10/16/2026
   status: 0
   pause: false
   retry: true
   actions:
-    - goto: https://hdtime.org/mybonus.php
+    - goto: https://example1.com/mybonus.php
     - wait: .head
-    - goto: https://hdtime.org/attendance.php
+    - goto: https://example1.com/attendance.php
     - wait: .head
     - ccheck: |
         const h2 = document.querySelector('h2');
         return h2 && h2.textContent.includes('签到成功');
-  lastFailNotifyDate: 7/1/2026
-- domain: hdfans.org
-  date: 10/16/2026
-  status: 0
-  pause: false
-  retry: true
-  actions:
-    - goto: https://hdfans.org/mybonus.php
-    - wait: .head  
-    - goto: https://hdfans.org/attendance.php
-    - wait: .head
-    - ccheck: |
-        const h2 = document.querySelector('h2');
-        return h2 && h2.textContent.includes('签到成功');        
+  lastFailNotifyDate: 7/1/2026 
 # 站点修改了了页面，使用特殊访问URL 或者验证方式 
-- domain: www.pttime.org
+- domain: www.example2.com # 比如 PTT
   date: 10/16/2026
   status: 0
   pause: false
   retry: false
   actions:
-    - goto: https://www.pttime.org/torrents.php
+    - goto: https://www.example2.com/torrents.php
     - wait: .head
     # 替换自建的用户ID
-    - goto: https://www.pttime.org/attendance.php?type=sign&uid=<uid>
+    - goto: https://www.example2.com/attendance.php?type=sign&uid=<uid>
     - wait: .head
     - check: '#info_block'
-- domain: pt.btschool.club
+- domain: www.example3.com # 比如学校
   date: 10/16/2026
   status: 0
   pause: false
   retry: false
   actions:
-    - goto: https://pt.btschool.club/torrents.php
+    - goto: https://www.example3.com/torrents.php
     - wait: .head
-    - goto: https://pt.btschool.club/index.php?action=addbonus
+    - goto: https://www.example3.com/index.php?action=addbonus
     - wait: .head
     - check: table#info_block   
 # 额外点击一次
-- domain: hdbao.cc
+- domain: example4.com # 比如红豆包
   date: 10/16/2026
   status: 0
   pause: false
   retry: false
   actions:
-    - goto: https://hdbao.cc/attendance.php
+    - goto: https://example4.com/attendance.php
     - wait: .head
     - action: |
         const submit = document.querySelector('input[type="submit"]');
@@ -104,36 +92,36 @@
         return false;
   lastFailNotifyDate: 10/12/2026
 # 签到的同时 顺手玩一下免费轮盘
-- domain: gamegamept.com
+- domain: example5.com # 比如游戏站
   date: 10/16/2026
   status: 0
   pause: false
   retry: false
   actions:
-    - goto: https://gamegamept.com/torrents.php
+    - goto: https://example5.com/torrents.php
     - wait: table.main
-    - goto: https://www.gamegamept.com/luckywheel.php
+    - goto: https://example5.com/luckywheel.php
     - wait: table.main
     - action: |
         const doSpin = document.querySelector('button#lw-spin');
         if(!!doSpin)doSpin.click();
     - action: await new Promise(resolve => setTimeout(resolve, 6000));
-    - goto: https://gamegamept.com/attendance.php
+    - goto: https://example5.com/attendance.php
     - wait: .head
     - ccheck: |
         const h2 = document.querySelector('h2');
         return h2 && h2.textContent.includes('签到成功');
   lastFailNotifyDate: 7/1/2026
 # 签到的同时 顺便喊个话
-- domain: ptlgs.org
+- domain: example6.com 
   date: 10/16/2026
   status: 0
   pause: false
   retry: false
   actions:
-    - goto: https://ptlgs.org/torrents.php
+    - goto: https://example6.com/torrents.php
     - wait: '#nav_block'
-    - goto: https://ptlgs.org/index.php
+    - goto: https://example6.com/index.php
     - wait: form[action="shoutbox.php"]
     # 固定次数的循环 3次积分 两次上传
     - loop:
@@ -156,20 +144,20 @@
               if(!!shbox_text && !!shbox_submit)shbox_submit.click();
           - wait: form[action="shoutbox.php"]
           - action: await new Promise(resolve => setTimeout(resolve, 5000));
-    - goto: https://ptlgs.org/attendance.php
+    - goto: https://example6.com/attendance.php
     - wait: '#nav_block'
     - ccheck: |
         const h2 = document.querySelector('h2');
         return !!h2 && h2.textContent.includes('签到成功');
   lastFailNotifyDate: 9/8/2026  
 # 支持其他框架签到方式
-- domain: rousi.pro
+- domain: example7.com # 比如肉丝新框架
   date: 10/16/2026
   status: 0
   pause: false
   retry: false
   actions:
-    - goto: https://rousi.pro/
+    - goto: https://example7.com/
     - cwait: |
         const results = document.querySelectorAll('header a');
         for (let result of results) {
@@ -191,15 +179,15 @@
         return false;
 # 高难度
 # 简单验证码
-- domain: www.oshen.win
+- domain: example8.com # 比如使用 数字验证码的 奥申
   date: 10/16/2026
   status: 0
   pause: false
   retry: true # 验证码不保证一次成功，建议打开重试
   actions:
-    - goto: https://www.oshen.win/torrents.php
+    - goto: https://example8.com/torrents.php
     - wait: .head  
-    - goto: https://www.oshen.win/attendance.php
+    - goto: https://example8.com/attendance.php
     - wait: .head
     - ccheck: |
         // 1. 获取图片元素
@@ -257,16 +245,16 @@
         }
         return false;
 # altcha 人机验证
-- domain: www.yemapt.org
+- domain: example9.com # 比如使用 altcha 的 野马
   date: 10/16/2026
   status: 0
   pause: false
   retry: true # 人机验证不保证一次成功，需打开重试
   actions:
-    - goto: https://www.yemapt.org/#/index
+    - goto: https:/example9.com/#/index
     - cwait: |-
         return Array.from(document.querySelectorAll('button')).filter(button=>button.textContent.includes('前往签到')).length > 0;
-    - goto: https://www.yemapt.org/#/user/growth?tab=checkIn
+    - goto: https://example9.com/#/user/growth?tab=checkIn
     - cwait: |-
         return Array.from(document.querySelectorAll('h2')).filter(button=>button.textContent.includes('成长中心')).length > 0;
     - switch:
@@ -353,15 +341,15 @@
     - wait: button[disabled]
   lastFailNotifyDate: 10/15/2026
 # 嵌入式 cloudflare 验证
-- domain: xloli.cc
+- domain: example10.com # 比如使用 cloudflare 盾的loli
   date: 10/16/2026
   status: 0
   pause: false
   retry: true # 人机验证不保证一次成功，需打开重试
   actions:
-    - goto: https://mua.xloli.cc/
+    - goto: https://example10.com/
     - wait: table#info_block
-    - goto: https://mua.xloli.cc/attendance.php
+    - goto: https://example10.com/attendance.php
     - wait: table#info_block
     - switch:
         - check: div.cf-turnstile
@@ -459,7 +447,7 @@
         return h2 && h2.textContent.includes('签到成功');
   lastFailNotifyDate: 10/12/2026
 # 非PT站点  
-- domain: fengchao.chat
+- domain: fengchao.chat # 比如 蜂巢
   date: 10/16/2026
   status: 0
   pause: false
@@ -467,7 +455,7 @@
   actions:
     - goto: https://fengchao.chat/
     - cwait: |
-        let waiting = document.querySelectorAll('a[href="/users/wlxxyw"]');
+        let waiting = document.querySelectorAll('a[href^="/users/"]');
         return !!waiting.length;
     - ccheck: |
         // 使用 ccheck 代替 action 来执行签到动作， 返回false直接整个流程失败
@@ -487,7 +475,7 @@
         return false;
     - goto: https://fengchao.chat/
     - cwait: |
-        let waiting = document.querySelectorAll('a[href="/users/wlxxyw"]');
+        let waiting = document.querySelectorAll('a[href^="/users/"]');
         return !!waiting.length;
     - ccheck: |
         return !!Array.from(document.querySelectorAll('button[type="button"]')).find(el=>el.textContent.trim() === '已签到');

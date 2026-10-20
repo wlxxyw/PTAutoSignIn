@@ -43,3 +43,13 @@ services:
       - './config/crontab:/etc/crontab.default:ro' # 定时任务配置
 
     restart: unless-stopped      
+
+  ocr:
+    build: ./ddddocr
+    container_name: ocr
+    network_mode: service:chromium-vnc # 处于相同网络，方便相互调用
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1024m     
