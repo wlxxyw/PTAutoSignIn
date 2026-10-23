@@ -189,6 +189,7 @@ export class ActionExecutor {
                 }
             }
         }else if(!!currentLoop.check || !!currentLoop.ccheck){ //模式二：条件循环
+            const maxTimes = Number(currentLoop.maxTimes) || 100; 
             const currentLoopCheck = this.#normalizeAction(!!currentLoop.check ? {check: currentLoop.check} : {ccheck: currentLoop.ccheck});
             let count = 0;
             while (true) {
@@ -215,7 +216,7 @@ export class ActionExecutor {
                         }
                     }
                 }
-                if(count > 100){
+                if(count > maxTimes){
                     log(`${domain} loop 次数过多！！`);
                     break;
                 }
